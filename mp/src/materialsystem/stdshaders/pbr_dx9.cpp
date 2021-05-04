@@ -27,6 +27,8 @@ const Sampler_t SAMPLER_LIGHTMAP = SHADER_SAMPLER7;
 const Sampler_t SAMPLER_MRAO = SHADER_SAMPLER10;
 const Sampler_t SAMPLER_EMISSIVE = SHADER_SAMPLER11;
 const Sampler_t SAMPLER_SPECULAR = SHADER_SAMPLER12;
+const Sampler_t SAMPLER_NORMAL2 = SHADER_SAMPLER13; // Test normal map layers
+const Sampler_t SAMPLER_NORMAL3 = SHADER_SAMPLER14;
 
 // Convars
 static ConVar mat_fullbright("mat_fullbright", "0", FCVAR_CHEAT);
@@ -46,6 +48,11 @@ struct PBR_Vars_t
     int baseColor;
     int normalTexture;
     int bumpMap;
+    int bumpTransform;
+    int bumpMap2;
+    int bumpTransform2;
+    int bumpMap3;
+    int bumpTransform3;
     int envMap;
     int baseTextureFrame;
     int baseTextureTransform;
@@ -72,6 +79,11 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         SHADER_PARAM(EMISSIONTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "", "Emission texture");
         SHADER_PARAM(NORMALTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture (deprecated, use $bumpmap)");
         SHADER_PARAM(BUMPMAP, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture");
+        SHADER_PARAM(BUMPTRANSFORM, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap texcoord transform" )
+        SHADER_PARAM(BUMPMAP2, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture2");
+		SHADER_PARAM(BUMPTRANSFORM2, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap2 texcoord transform" )
+        SHADER_PARAM(BUMPMAP3, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture3");
+		SHADER_PARAM(BUMPTRANSFORM3, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap3 texcoord transform" )
         SHADER_PARAM(USEENVAMBIENT, SHADER_PARAM_TYPE_BOOL, "0", "Use the cubemaps to compute ambient light.");
         SHADER_PARAM(SPECULARTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "", "Specular F0 RGB map");
         SHADER_PARAM(PARALLAX, SHADER_PARAM_TYPE_BOOL, "0", "Use Parallax Occlusion Mapping.");
@@ -86,6 +98,11 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         info.baseColor = COLOR;
         info.normalTexture = NORMALTEXTURE;
         info.bumpMap = BUMPMAP;
+        info.bumpTransform = BUMPTRANSFORM;
+        info.bumpMap2 = BUMPMAP2;
+        info.bumpTransform2 = BUMPTRANSFORM2;
+        info.bumpMap3 = BUMPMAP3;
+        info.bumpTransform3 = BUMPTRANSFORM3;
         info.baseTextureFrame = FRAME;
         info.baseTextureTransform = BASETEXTURETRANSFORM;
         info.alphaTestReference = ALPHATESTREFERENCE;
@@ -111,6 +128,13 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         // Dynamic lights need a bumpmap
         if (!params[BUMPMAP]->IsDefined())
             params[BUMPMAP]->SetStringValue("dev/flat_normal");
+
+        // Fallback to original bumpmap
+        if (!params[BUMPMAP2]->IsDefined())
+            params[BUMPMAP2]->SetStringValue(params[BUMPMAP]->GetStringValue());
+
+        if (!params[BUMPMAP3]->IsDefined())
+            params[BUMPMAP3]->SetStringValue(params[BUMPMAP]->GetStringValue());
 
         // Set a good default mrao texture
         if (!params[MRAOTEXTURE]->IsDefined())
@@ -147,6 +171,12 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
 
         Assert(info.bumpMap >= 0);
         LoadBumpMap(info.bumpMap);
+
+        Assert(info.bumpMap2 >= 0);
+        LoadBumpMap(info.bumpMap2);
+
+        Assert(info.bumpMap3 >= 0);
+        LoadBumpMap(info.bumpMap3);
 
         Assert(info.envMap >= 0);
         int envMapFlags = g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE ? TEXTUREFLAGS_SRGB : 0;
@@ -197,6 +227,8 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         // Setting up booleans
         bool bHasBaseTexture = (info.baseTexture != -1) && params[info.baseTexture]->IsTexture();
         bool bHasNormalTexture = (info.bumpMap != -1) && params[info.bumpMap]->IsTexture();
+        bool bHasNormalTexture2 = (info.bumpMap2 != -1) && params[info.bumpMap2]->IsTexture();
+        bool bHasNormalTexture3 = (info.bumpMap3 != -1) && params[info.bumpMap3]->IsTexture();
         bool bHasMraoTexture = (info.mraoTexture != -1) && params[info.mraoTexture]->IsTexture();
         bool bHasEmissionTexture = (info.emissionTexture != -1) && params[info.emissionTexture]->IsTexture();
         bool bHasEnvTexture = (info.envMap != -1) && params[info.envMap]->IsTexture();
@@ -244,6 +276,10 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             pShaderShadow->EnableSRGBRead(SAMPLER_MRAO, false);         // MRAO isn't sRGB
             pShaderShadow->EnableTexture(SAMPLER_NORMAL, true);         // Normal texture
             pShaderShadow->EnableSRGBRead(SAMPLER_NORMAL, false);       // Normals aren't sRGB
+            pShaderShadow->EnableTexture(SAMPLER_NORMAL2, true);         // Ditto of two lines above
+            pShaderShadow->EnableSRGBRead(SAMPLER_NORMAL2, false);
+            pShaderShadow->EnableTexture(SAMPLER_NORMAL3, true);
+            pShaderShadow->EnableSRGBRead(SAMPLER_NORMAL3, false);
             pShaderShadow->EnableTexture(SAMPLER_SPECULAR, true);       // Specular F0 texture
             pShaderShadow->EnableSRGBRead(SAMPLER_SPECULAR, true);      // Specular F0 is sRGB
 
@@ -387,6 +423,22 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             else
             {
                 pShaderAPI->BindStandardTexture(SAMPLER_NORMAL, TEXTURE_NORMALMAP_FLAT);
+            }
+            if (bHasNormalTexture2)
+            {
+                BindTexture(SAMPLER_NORMAL2, info.bumpMap2, 0);
+            }
+            else
+            {
+                pShaderAPI->BindStandardTexture(SAMPLER_NORMAL2, TEXTURE_NORMALMAP_FLAT);
+            }
+            if (bHasNormalTexture3)
+            {
+                BindTexture(SAMPLER_NORMAL3, info.bumpMap3, 0);
+            }
+            else
+            {
+                pShaderAPI->BindStandardTexture(SAMPLER_NORMAL3, TEXTURE_NORMALMAP_FLAT);
             }
 
             // Setting up mrao map
@@ -532,6 +584,15 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
 
             // Setting up base texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.baseTextureTransform);
+
+            // Setting up base texture transform
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform);
+
+            // Setting up base texture transform
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform2);
+
+            // Setting up base texture transform
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform3);
 
             // This is probably important
             SetModulationPixelShaderDynamicState_LinearColorSpace(1);
