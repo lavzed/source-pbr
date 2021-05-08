@@ -257,6 +257,13 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             {
                 pShaderShadow->EnableBlending(true);
                 pShaderShadow->BlendFunc(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // Additive blending
+                if ( bIsAlphaTested )
+					{
+						// disable alpha test and use the zfunc zequals since alpha isn't guaranteed to 
+						// be the same on both the regular pass and the flashlight pass.
+						pShaderShadow->EnableAlphaTest( false );
+						pShaderShadow->DepthFunc( SHADER_DEPTHFUNC_EQUAL );
+					}
             }
             else
             {
@@ -585,13 +592,13 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             // Setting up base texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.baseTextureTransform);
 
-            // Setting up base texture transform
+            // Setting up bump texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform);
 
-            // Setting up base texture transform
+            // Setting up bump2 texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform2);
 
-            // Setting up base texture transform
+            // Setting up bump3 texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform3);
 
             // This is probably important
