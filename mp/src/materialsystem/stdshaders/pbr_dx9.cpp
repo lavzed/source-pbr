@@ -36,6 +36,8 @@ static ConVar mat_specular("mat_specular", "1", FCVAR_CHEAT);
 static ConVar mat_pbr_force_20b("mat_pbr_force_20b", "0", FCVAR_CHEAT);
 static ConVar mat_pbr_parallaxmap("mat_pbr_parallaxmap", "1");
 
+void SetHWMorphVertexShaderState(int nDimConst, int nSubrectConst, VertexTextureSampler_t morphSampler);
+
 // Variables for this shader
 struct PBR_Vars_t
 {
@@ -98,11 +100,11 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         info.baseColor = COLOR;
         info.normalTexture = NORMALTEXTURE;
         info.bumpMap = BUMPMAP;
-        info.bumpTransform = BUMPTRANSFORM;
+        info.bumpTransform = BASETEXTURETRANSFORM;
         info.bumpMap2 = BUMPMAP2;
-        info.bumpTransform2 = BUMPTRANSFORM2;
+        info.bumpTransform2 = BASETEXTURETRANSFORM;
         info.bumpMap3 = BUMPMAP3;
-        info.bumpTransform3 = BUMPTRANSFORM3;
+        info.bumpTransform3 = BASETEXTURETRANSFORM;
         info.baseTextureFrame = FRAME;
         info.baseTextureTransform = BASETEXTURETRANSFORM;
         info.alphaTestReference = ALPHATESTREFERENCE;
@@ -233,6 +235,7 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         bool bHasEmissionTexture = (info.emissionTexture != -1) && params[info.emissionTexture]->IsTexture();
         bool bHasEnvTexture = (info.envMap != -1) && params[info.envMap]->IsTexture();
         bool bIsAlphaTested = IS_FLAG_SET(MATERIAL_VAR_ALPHATEST) != 0;
+        bool bIsDecal = IS_FLAG_SET( MATERIAL_VAR_DECAL );
         bool bHasFlashlight = UsingFlashlight(params);
         bool bHasColor = (info.baseColor != -1) && params[info.baseColor]->IsDefined();
         bool bLightMapped = !IS_FLAG_SET(MATERIAL_VAR_MODEL);
@@ -339,6 +342,7 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
 
             if (!g_pHardwareConfig->SupportsShaderModel_3_0() || mat_pbr_force_20b.GetBool())
             {
+
                 // Setting up static vertex shader
                 DECLARE_STATIC_VERTEX_SHADER(pbr_vs20b);
                 SET_STATIC_VERTEX_SHADER(pbr_vs20b);
@@ -354,6 +358,7 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             }
             else
             {
+
                 // Setting up static vertex shader
                 DECLARE_STATIC_VERTEX_SHADER(pbr_vs30);
                 SET_STATIC_VERTEX_SHADER(pbr_vs30);
@@ -550,10 +555,13 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
 
             if (!g_pHardwareConfig->SupportsShaderModel_3_0() || mat_pbr_force_20b.GetBool())
             {
+                SetHWMorphVertexShaderState( VERTEX_SHADER_SHADER_SPECIFIC_CONST_10, VERTEX_SHADER_SHADER_SPECIFIC_CONST_11, SHADER_VERTEXTEXTURE_SAMPLER0 );
+                
                 // Setting up dynamic vertex shader
                 DECLARE_DYNAMIC_VERTEX_SHADER(pbr_vs20b);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(DOWATERFOG, fogIndex);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(SKINNING, numBones > 0);
+                SET_DYNAMIC_VERTEX_SHADER_COMBO( MORPHING, pShaderAPI->IsHWMorphingEnabled() );
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(LIGHTING_PREVIEW, pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_ENABLE_FIXED_LIGHTING) != 0);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(COMPRESSED_VERTS, (int)vertexCompression);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(NUM_LIGHTS, lightState.m_nNumLights);
@@ -567,14 +575,20 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
                 SET_DYNAMIC_PIXEL_SHADER_COMBO(PIXELFOGTYPE, pShaderAPI->GetPixelFogCombo());
                 SET_DYNAMIC_PIXEL_SHADER_COMBO(FLASHLIGHTSHADOWS, bFlashlightShadows);
                 SET_DYNAMIC_PIXEL_SHADER(pbr_ps20b);
+
+                bool bUnusedTexCoords[3] = { false, false, !pShaderAPI->IsHWMorphingEnabled() || !bIsDecal };
+				pShaderAPI->MarkUnusedVertexFields( 0, 3, bUnusedTexCoords );
             }
             else
             {
+				SetHWMorphVertexShaderState(VERTEX_SHADER_SHADER_SPECIFIC_CONST_10, VERTEX_SHADER_SHADER_SPECIFIC_CONST_11, SHADER_VERTEXTEXTURE_SAMPLER0);
+
                 // Setting up dynamic vertex shader
                 DECLARE_DYNAMIC_VERTEX_SHADER(pbr_vs30);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(DOWATERFOG, fogIndex);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(SKINNING, numBones > 0);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(LIGHTING_PREVIEW, pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_ENABLE_FIXED_LIGHTING) != 0);
+                SET_DYNAMIC_VERTEX_SHADER_COMBO( MORPHING, pShaderAPI->IsHWMorphingEnabled() );
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(COMPRESSED_VERTS, (int)vertexCompression);
                 SET_DYNAMIC_VERTEX_SHADER_COMBO(NUM_LIGHTS, lightState.m_nNumLights);
                 SET_DYNAMIC_VERTEX_SHADER(pbr_vs30);
@@ -587,19 +601,22 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
                 SET_DYNAMIC_PIXEL_SHADER_COMBO(PIXELFOGTYPE, pShaderAPI->GetPixelFogCombo());
                 SET_DYNAMIC_PIXEL_SHADER_COMBO(FLASHLIGHTSHADOWS, bFlashlightShadows);
                 SET_DYNAMIC_PIXEL_SHADER(pbr_ps30);
+
+                bool bUnusedTexCoords[3] = { false, false, !pShaderAPI->IsHWMorphingEnabled() || !bIsDecal };
+				pShaderAPI->MarkUnusedVertexFields( 0, 3, bUnusedTexCoords );
             }
 
             // Setting up base texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.baseTextureTransform);
 
             // Setting up bump texture transform
-            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform);
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_1, info.bumpTransform);
 
             // Setting up bump2 texture transform
-            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform2);
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_2, info.bumpTransform2);
 
             // Setting up bump3 texture transform
-            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.bumpTransform3);
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_3, info.bumpTransform3);
 
             // This is probably important
             SetModulationPixelShaderDynamicState_LinearColorSpace(1);
@@ -679,6 +696,30 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         // Actually draw the shader
         Draw();
     };
+
+	void SetHWMorphVertexShaderState(int nDimConst, int nSubrectConst, VertexTextureSampler_t morphSampler)
+	{
+#ifndef _X360
+		if (!s_pShaderAPI->IsHWMorphingEnabled())
+			return;
+
+		int nMorphWidth, nMorphHeight;
+		s_pShaderAPI->GetStandardTextureDimensions(&nMorphWidth, &nMorphHeight, TEXTURE_MORPH_ACCUMULATOR);
+
+		int nDim = s_pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_MORPH_ACCUMULATOR_4TUPLE_COUNT);
+		float pMorphAccumSize[4] = { (float)nMorphWidth, (float)nMorphHeight, (float)nDim, 0.0f };
+		s_pShaderAPI->SetVertexShaderConstant(nDimConst, pMorphAccumSize);
+
+		int nXOffset = s_pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_MORPH_ACCUMULATOR_X_OFFSET);
+		int nYOffset = s_pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_MORPH_ACCUMULATOR_Y_OFFSET);
+		int nWidth = s_pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_MORPH_ACCUMULATOR_SUBRECT_WIDTH);
+		int nHeight = s_pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_MORPH_ACCUMULATOR_SUBRECT_HEIGHT);
+		float pMorphAccumSubrect[4] = { (float)nXOffset, (float)nYOffset, (float)nWidth, (float)nHeight };
+		s_pShaderAPI->SetVertexShaderConstant(nSubrectConst, pMorphAccumSubrect);
+
+		s_pShaderAPI->BindStandardVertexTexture(morphSampler, TEXTURE_MORPH_ACCUMULATOR);
+#endif
+	}
 
 // Closing it off
 END_SHADER;

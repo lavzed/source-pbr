@@ -81,6 +81,27 @@ public:
 #endif
 	}
 private:
+	int m_nMORPHING;
+#ifdef _DEBUG
+	bool m_bMORPHING;
+#endif
+public:
+	void SetMORPHING( int i )
+	{
+		Assert( i >= 0 && i <= 1 );
+		m_nMORPHING = i;
+#ifdef _DEBUG
+		m_bMORPHING = true;
+#endif
+	}
+	void SetMORPHING( bool i )
+	{
+		m_nMORPHING = i ? 1 : 0;
+#ifdef _DEBUG
+		m_bMORPHING = true;
+#endif
+	}
+private:
 	int m_nLIGHTING_PREVIEW;
 #ifdef _DEBUG
 	bool m_bLIGHTING_PREVIEW;
@@ -138,6 +159,10 @@ public:
 #endif // _DEBUG
 		m_nSKINNING = 0;
 #ifdef _DEBUG
+		m_bMORPHING = false;
+#endif // _DEBUG
+		m_nMORPHING = 0;
+#ifdef _DEBUG
 		m_bLIGHTING_PREVIEW = false;
 #endif // _DEBUG
 		m_nLIGHTING_PREVIEW = 0;
@@ -154,7 +179,7 @@ public:
 		bool bAllDynamicVarsDefined = m_bCOMPRESSED_VERTS && m_bDOWATERFOG && m_bSKINNING && m_bLIGHTING_PREVIEW && m_bNUM_LIGHTS;
 		Assert( bAllDynamicVarsDefined );
 #endif // _DEBUG
-		return ( 1 * m_nCOMPRESSED_VERTS ) + ( 2 * m_nDOWATERFOG ) + ( 4 * m_nSKINNING ) + ( 8 * m_nLIGHTING_PREVIEW ) + ( 16 * m_nNUM_LIGHTS ) + 0;
+		return ( 1 * m_nCOMPRESSED_VERTS ) + ( 2 * m_nDOWATERFOG ) + ( 4 * m_nSKINNING ) + ( 8 * m_nMORPHING ) + ( 16 * m_nLIGHTING_PREVIEW ) + ( 32 * m_nNUM_LIGHTS ) + 0;
 	}
 };
-#define shaderDynamicTest_pbr_vs30 vsh_forgot_to_set_dynamic_COMPRESSED_VERTS + vsh_forgot_to_set_dynamic_DOWATERFOG + vsh_forgot_to_set_dynamic_SKINNING + vsh_forgot_to_set_dynamic_LIGHTING_PREVIEW + vsh_forgot_to_set_dynamic_NUM_LIGHTS + 0
+#define shaderDynamicTest_pbr_vs30 vsh_forgot_to_set_dynamic_COMPRESSED_VERTS + vsh_forgot_to_set_dynamic_DOWATERFOG + vsh_forgot_to_set_dynamic_SKINNING + vsh_forgot_to_set_dynamic_MORPHING + vsh_forgot_to_set_dynamic_LIGHTING_PREVIEW + vsh_forgot_to_set_dynamic_NUM_LIGHTS + 0
