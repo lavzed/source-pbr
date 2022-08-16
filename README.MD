@@ -30,7 +30,7 @@ directory in the "garrysmod" folder (garrysmod\shaders\fxc). Again, make a folde
 Thanks to thexas4 and his team for introducing (Unreal-like) PBR in Source Engine. 
 
 ===========================================================================================               
-               SOURCE 1 SDK LICENSE
+###               SOURCE 1 SDK LICENSE
 
 Source SDK Copyright(c) Valve Corp.  
 
