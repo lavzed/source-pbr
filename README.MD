@@ -1,13 +1,14 @@
 # Preamble
-May 2021
+August 2022
 
-I was tired of mesh stacking to achieve PBR. I have a few augmentations here and there.
+This branch of thexas4 serves to add additional features into the PBR shader. This shader is an alternative to BlueFlytrap's mesh-stacking method, which achieves only a pseudo-PBR effect. I added the additional features below to correspond with humans made from Character Creator 3 and up.
 
 ### Features (or differences from main branch):
 - Two extra bumpmaps
 - Facial flexes
 - Fixed alpha-test lighting
 - Weird rimlight/subsurface-scattering implementation
+- Bumptransform for micronormals
 
 These features have rudimentary implementation; they have been made not with optimization 
 in mind, rather to enhance my Garry's Mod artistry. I would like your thoughts on how 
