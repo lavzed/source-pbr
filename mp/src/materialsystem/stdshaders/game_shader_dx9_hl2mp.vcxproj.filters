@@ -99,6 +99,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="buildhl2mpshaders.bat" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="stdshader_dx9_20b.txt">
@@ -143,10 +144,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="buildsdkshaders.bat">
-      <Filter></Filter>
+      <Filter>
+      </Filter>
     </None>
     <None Include="buildshaders.bat">
-      <Filter></Filter>
+      <Filter>
+      </Filter>
     </None>
     <None Include="..\..\materialsystem\stdshaders\game_shader_dx9_base.vpc">
       <Filter>VPC Scripts</Filter>

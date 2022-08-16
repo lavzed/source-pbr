@@ -27,9 +27,9 @@ static const bool g_bDecalOffset	= false;
 #endif
 
 const float4 cBaseTexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_0);
-const float4 cNormTexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_1);
-const float4 cNorm2TexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_2);
-const float4 cNorm3TexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_3);
+const float4 cNormTexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_2);
+//const float4 cNorm2TexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_2);
+//const float4 cNorm3TexCoordTransform[2]  : register(SHADER_SPECIFIC_CONST_3);
 
 const float3 cMorphTargetTextureDim		: register( SHADER_SPECIFIC_CONST_10 );
 const float4 cMorphSubrect				: register( SHADER_SPECIFIC_CONST_11 );
@@ -51,9 +51,6 @@ struct VS_INPUT
     float4 vTexCoord1		: TEXCOORD3;
 	float4 vTexCoord2		: TEXCOORD4;
 	float4 vTexCoord3		: TEXCOORD5;
-    float2 vNTexCoord0               : TEXCOORD7;
-    float2 vN2TexCoord0               : TEXCOORD8;
-    float2 vN3TexCoord0               : TEXCOORD9;
 
     // Position and normal/tangent deltas
 	float3 vPosFlex			: POSITION1;
@@ -74,9 +71,7 @@ struct VS_OUTPUT
     float3 projPos                  : TEXCOORD4;
     float4 lightmapTexCoord1And2    : TEXCOORD5;
     float4 lightmapTexCoord3        : TEXCOORD6;
-    //float2 normTexCoord             : TEXCOORD7;
-    //float2 norm2TexCoord             : TEXCOORD8;
-    //float2 norm3TexCoord             : TEXCOORD9;
+    float2 normTexCoord             : TEXCOORD7;
 };
 
 //-----------------------------------------------------------------------------
@@ -103,6 +98,7 @@ VS_OUTPUT main( const VS_INPUT v )
     float3 vNormal;
     DecompressVertex_Normal(v.vNormal, vNormal);
 
+    // Makes facial flexes possible
 #if !defined( SHADER_MODEL_VS_3_0 ) || !MORPHING
 	ApplyMorph(v.vPosFlex, v.vNormalFlex, vPosition.xyz, vNormal);
 #else
@@ -159,19 +155,8 @@ VS_OUTPUT main( const VS_INPUT v )
     o.baseTexCoord.y = dot(v.vTexCoord0, cBaseTexCoordTransform[1]);
 
     // Normal texture coordinate transform
-    //o.normTexCoord.x = dot(v.vNTexCoord0, cNormTexCoordTransform[0]);
-    //o.normTexCoord.y = dot(v.vNTexCoord0, cNormTexCoordTransform[1]);
-    //o.normTexCoord = v.vNTexCoord0;
-
-    // Normal2 texture coordinate transform
-    //o.norm2TexCoord.x = dot(v.vN2TexCoord0, cNorm2TexCoordTransform[0]);
-    //o.norm2TexCoord.y = dot(v.vN2TexCoord0, cNorm2TexCoordTransform[1]);
-    //o.norm2TexCoord = v.vN2TexCoord0;
-
-    // Normal3 texture coordinate transform
-    //o.norm3TexCoord.x = dot(v.vN3TexCoord0, cNorm3TexCoordTransform[0]);
-    //o.norm3TexCoord.y = dot(v.vN3TexCoord0, cNorm3TexCoordTransform[1]);
-    //o.norm3TexCoord = v.vN3TexCoord0;
-
+    o.normTexCoord.x = dot(v.vTexCoord0, cNormTexCoordTransform[0]);
+    o.normTexCoord.y = dot(v.vTexCoord0, cNormTexCoordTransform[1]);
+    
     return o;
 }

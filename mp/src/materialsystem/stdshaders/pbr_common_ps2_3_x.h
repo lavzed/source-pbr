@@ -126,6 +126,21 @@ float3 calculateLight(float3 lightIn, float3 lightIntensity, float3 lightOut, fl
 #endif
 }
 
+// Approximate fast subsurface scattering with Alan Zucconi's method
+// https://www.alanzucconi.com/2017/08/30/fast-subsurface-scattering-2/
+float3 subsurfaceScattering(float3 lightIn, float3 lightIntensity, float3 lightOut, float3 normal, float3 ambient, float sssMap, float3 sssTransMap, float3 albedo, float scale)
+{
+    float3 L = lightIn;
+    float3 V = lightOut;
+    float3 N = normal;
+
+    float3 H = normalize(L + N);
+    float VdotH = pow(saturate(dot(V, -H)), 1) * scale;
+    float3 I = (VdotH + ambient.rgb) * sssTransMap;
+
+    return I * sssMap * lightIntensity * albedo.r;
+}
+
 // Get diffuse ambient light
 float3 ambientLookupLightmap(float3 normal, float3 EnvAmbientCube[6], float3 textureNormal, float4 lightmapTexCoord1And2, float4 lightmapTexCoord3, sampler LightmapSampler, float4 g_DiffuseModulation)
 {

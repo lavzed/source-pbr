@@ -18,6 +18,7 @@
 #include "materialsystem/ishaderapi.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
 #include "shaderlib/BaseShader.h"
+//#include "materialsystem/BaseVSShader.h"
 #include "convar.h"
 
 //-----------------------------------------------------------------------------
@@ -109,8 +110,10 @@ public:
 
 	virtual void InitShaderParams( IMaterialVar** ppParams, const char *pMaterialName );
 	virtual void InitShaderInstance( IMaterialVar** ppParams, IShaderInit *pShaderInit, const char *pMaterialName, const char *pTextureGroupName );
-	virtual void DrawElements( IMaterialVar **params, int nModulationFlags, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI,
+	virtual void DrawElements(IMaterialVar **params, int nModulationFlags, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI,
 								VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContext );
+
+	//virtual void SetHWMorphVertexShaderState(int nDimConst, int nSubrectConst, VertexTextureSampler_t morphSampler);
 
 	virtual	const SoftwareVertexShader_t GetSoftwareVertexShader() const { return m_SoftwareVertexShader; }
 
@@ -123,7 +126,7 @@ public:
 	// These functions must be implemented by the shader
 	virtual void OnInitShaderParams( IMaterialVar** ppParams, const char *pMaterialName ) {}
 	virtual void OnInitShaderInstance( IMaterialVar** ppParams, IShaderInit *pShaderInit, const char *pMaterialName ) = 0;
-	virtual void OnDrawElements( IMaterialVar **params, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContextDataPtr ) = 0;
+	virtual void OnDrawElements( IMaterialVar **params, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContextDataPtr) = 0;
 
 	// Sets the default shadow state
 	void SetInitialShadowState( );
@@ -260,7 +263,7 @@ public:
 	bool UsingFlashlight( IMaterialVar **params ) const;
 	bool UsingEditor( IMaterialVar **params ) const;
 
-	void DrawFlashlight_dx70( IMaterialVar** params, IShaderDynamicAPI *pShaderAPI, 
+	void DrawFlashlight_dx70( IMaterialVar** params, IShaderDynamicAPI *pShaderAPI,
 							  IShaderShadow* pShaderShadow, 
 							  int flashlightTextureVar, int flashlightTextureFrameVar, 
 							  bool suppress_lighting = false );

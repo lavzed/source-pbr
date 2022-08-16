@@ -25,6 +25,7 @@
 // Flashlight shadow filter mode is irrelevant if there is no flashlight
 // SKIP: ( $FLASHLIGHT == 0 ) && ( $FLASHLIGHTDEPTHFILTERMODE != 0 )
 
+
 #include "common_ps_fxc.h"
 #include "common_flashlight_fxc.h"
 #include "common_lightmappedgeneric_fxc.h"
@@ -42,6 +43,7 @@ const float4 g_FlashlightPos                    : register(PSREG_FLASHLIGHT_POSI
 const float4x4 g_FlashlightWorldToTexture       : register(PSREG_FLASHLIGHT_TO_WORLD_TEXTURE);
 PixelShaderLightInfo cLightInfo[3]              : register(PSREG_LIGHT_INFO_ARRAY);         // 2 registers each - 6 registers total (4th light spread across w's)
 const float4 g_BaseColor                        : register(PSREG_SELFILLUMTINT);
+const float4 g_SSSScale                         : register(PSREG_SPEC_RIM_PARAMS)
 
 #if PARALLAXOCCLUSION
 const float4 g_ParallaxParms                    : register( c27 );
@@ -67,6 +69,9 @@ sampler SpecularTextureSampler      : register(s12);    // Specular F0 texture
 sampler NormalTextureSampler2        : register(s13);     // Normal map
 sampler NormalTextureSampler3        : register(s14);     // Normal map
 
+sampler SSSTextureSampler					: register( s15 );	// Sub-surface Scattering map with TransMap in RGB and Texture in alpha
+
+
 #define ENVMAPLOD (g_EyePos.a)
 
 struct PS_INPUT
@@ -79,8 +84,6 @@ struct PS_INPUT
     float4 lightmapTexCoord1And2    : TEXCOORD5; 
     float4 lightmapTexCoord3        : TEXCOORD6;
     float2 normTexCoord             : TEXCOORD7;
-    float2 norm2TexCoord             : TEXCOORD8;
-    float2 norm3TexCoord             : TEXCOORD9;
 };
 
 // Entry point
@@ -103,11 +106,15 @@ float4 main(PS_INPUT i) : COLOR
     float3 outgoingLightRay = g_EyePos.xyz - i.worldPos;
        float3 outgoingLightDirectionTS = worldToRelative( outgoingLightRay, surfTangent, surfBase, surfNormal);
     float2 correctedTexCoord = parallaxCorrect(i.baseTexCoord, outgoingLightDirectionTS , NormalTextureSampler , PARALLAX_DEPTH , PARALLAX_CENTER);
+    float2 correctedNormTexCoord = parallaxCorrect(i.normTexCoord, outgoingLightDirectionTS , NormalTextureSampler , PARALLAX_DEPTH , PARALLAX_CENTER);
 #else
     float2 correctedTexCoord = i.baseTexCoord;
+    float2 correctedNormTexCoord = i.normTexCoord;
 #endif
-
-    float3 textureNormal = normalize((tex2D( NormalTextureSampler,  correctedTexCoord).xyz - float3(0.5, 0.5, 0.5)) * 2);
+    
+    // TODO: Fix stretching of texture coordinates
+    // FIXME: Remove redundant variables
+    float3 textureNormal = normalize((tex2D( NormalTextureSampler,  correctedNormTexCoord).xyz - float3(0.5, 0.5, 0.5)) * 2);
     float3 normal = normalize(mul(textureNormal, normalBasis)); // World Normal
 
 	float3 textureNormal2 = normalize((tex2D( NormalTextureSampler2,  correctedTexCoord).xyz - float3(0.5, 0.5, 0.5)) * 2);
@@ -115,6 +122,14 @@ float4 main(PS_INPUT i) : COLOR
 
 	float3 textureNormal3 = normalize((tex2D( NormalTextureSampler3,  correctedTexCoord).xyz - float3(0.5, 0.5, 0.5)) * 2);
     float3 normal3 = normalize(mul(textureNormal3, normalBasis)); // World Normal
+
+    float microNormalMask = tex2D(NormalTextureSampler2, correctedNormTexCoord).a;
+
+    // Attempt to combine the normals via the "Whiteout Blending"
+    // https://blog.selfshadow.com/publications/blending-in-detail/
+    float3 resultantTextureNormal = normalize(float3(textureNormal.xy*microNormalMask + textureNormal2.xy + textureNormal3.xy, textureNormal.z*textureNormal2.z*textureNormal3.z));
+
+    float3 resultantNormal = normalize(mul(resultantTextureNormal, normalBasis)); // World Normal
 
     float4 albedo = tex2D(BaseTextureSampler, correctedTexCoord);
     albedo.xyz *= g_BaseColor;
@@ -127,17 +142,19 @@ float4 main(PS_INPUT i) : COLOR
 #if SPECULAR
     float3 specular = tex2D(SpecularTextureSampler, correctedTexCoord).xyz;
 #endif
-    
-    textureNormal.y *= flipSign; // Fixup textureNormal for ambient lighting
-	textureNormal2.y *= flipSign;
-	textureNormal3.y *= flipSign;
+    float4 sss = tex2D(SSSTextureSampler, correctedTexCoord);
+    float sssMap = sss.a;
+    float3 sssTransMap = sss.rgb;
+
+    // textureNormal.y *= flipSign; // Fixup textureNormal for ambient lighting
+	// textureNormal2.y *= flipSign;
+	// textureNormal3.y *= flipSign;
+    resultantTextureNormal.y *= flipSign;
 
     float3 outgoingLightDirection = normalize(g_EyePos.xyz - i.worldPos); // Lo
-    float lightDirectionAngle = max(0, dot(normal, outgoingLightDirection)); // cosLo
-	float lightDirectionAngle2 = max(0, dot(normal2, outgoingLightDirection)); // cosLo
-	float lightDirectionAngle3 = max(0, dot(normal3, outgoingLightDirection)); // cosLo
+    float lightDirectionAngle = max(0, dot(resultantNormal, outgoingLightDirection)); // cosLo
 
-    float3 specularReflectionVector = 2.0 * (lightDirectionAngle+lightDirectionAngle2+lightDirectionAngle3)/3.0 * normal - outgoingLightDirection; // Lr
+    float3 specularReflectionVector = 2.0 * lightDirectionAngle * resultantNormal - outgoingLightDirection; // Lr
 
 #if SPECULAR
     float3 fresnelReflectance = specular.rgb; // F0
@@ -150,19 +167,16 @@ float4 main(PS_INPUT i) : COLOR
     float3 ambientLighting = 0.0;
     if (!FLASHLIGHT)
     {
-        float3 diffuseIrradiance = ambientLookup(normal, EnvAmbientCube, textureNormal, i.lightmapTexCoord1And2, i.lightmapTexCoord3, LightmapSampler, g_DiffuseModulation);
-		float3 diffuseIrradiance2 = ambientLookup(normal2, EnvAmbientCube, textureNormal2, i.lightmapTexCoord1And2, i.lightmapTexCoord3, LightmapSampler, g_DiffuseModulation);
-		float3 diffuseIrradiance3 = ambientLookup(normal3, EnvAmbientCube, textureNormal3, i.lightmapTexCoord1And2, i.lightmapTexCoord3, LightmapSampler, g_DiffuseModulation);
+        float3 diffuseIrradiance = ambientLookup(resultantNormal, EnvAmbientCube, resultantTextureNormal, i.lightmapTexCoord1And2, i.lightmapTexCoord3, LightmapSampler, g_DiffuseModulation);
         // return float4(diffuseIrradiance, 1); // testing diffuse irraciance
         float3 ambientLightingFresnelTerm = fresnelSchlick(fresnelReflectance, lightDirectionAngle); // F
-		float3 ambientLightingFresnelTerm2 = fresnelSchlick(fresnelReflectance, lightDirectionAngle2); // F
-		float3 ambientLightingFresnelTerm3 = fresnelSchlick(fresnelReflectance, lightDirectionAngle3); // F
 #if SPECULAR
-        float3 diffuseContributionFactor = 1 - (ambientLightingFresnelTerm+ambientLightingFresnelTerm2+ambientLightingFresnelTerm3)/3.0; // kd
+        float3 diffuseContributionFactor = 1 - ambientLightingFresnelTerm; // kd
 #else
-        float3 diffuseContributionFactor = lerp(1 - (ambientLightingFresnelTerm+ambientLightingFresnelTerm2+ambientLightingFresnelTerm3)/3.0, 0, metalness); ; // kd
+        float3 diffuseContributionFactor = lerp(1 - ambientLightingFresnelTerm, 0, metalness); ; // kd
 #endif
-        float3 diffuseIBL = diffuseContributionFactor * albedo.rgb * (diffuseIrradiance+diffuseIrradiance2+diffuseIrradiance3) / 3.0;
+
+        float3 diffuseIBL = diffuseContributionFactor * albedo.rgb * diffuseIrradiance;
 
         float4 specularUV = float4(specularReflectionVector, roughness * ENVMAPLOD);
         float3 lookupHigh = ENV_MAP_SCALE * texCUBElod(EnvmapSampler, specularUV).xyz;
@@ -183,7 +197,8 @@ float4 main(PS_INPUT i) : COLOR
             float3 LightColor = PixelShaderGetLightColor(cLightInfo, n) * GetAttenForLight(i.lightAtten, n); // Li
 
             directLighting += calculateLight(LightIn, LightColor, outgoingLightDirection,
-                    (normal+normal2+normal3)/3.0, fresnelReflectance, roughness, metalness, lightDirectionAngle, albedo.rgb);
+                    resultantNormal, fresnelReflectance, roughness, metalness, lightDirectionAngle, albedo.rgb);
+            directLighting += subsurfaceScattering(LightIn, LightColor, outgoingLightDirection, resultantNormal, ambientLighting, sssMap, sssTransMap, albedo.rgb);
         }
     }
     // End direct
@@ -218,7 +233,8 @@ float4 main(PS_INPUT i) : COLOR
         float3 flashLightIn = normalize(g_FlashlightPos.xyz - i.worldPos);
 
         directLighting += max(0, calculateLight(flashLightIn, flashLightIntensity, outgoingLightDirection,
-                (normal+normal2+normal3)/3.0, fresnelReflectance, roughness, metalness, lightDirectionAngle, albedo.rgb));
+                resultantNormal, fresnelReflectance, roughness, metalness, lightDirectionAngle, albedo.rgb));
+        directLighting += max(0, subsurfaceScattering(flashLightIn, flashLightIntensity, outgoingLightDirection, resultantNormal, ambientLighting, sssMap, sssTransMap, albedo.rgb));
     }
     // End flashlight
 

@@ -30,6 +30,9 @@ const Sampler_t SAMPLER_SPECULAR = SHADER_SAMPLER12;
 const Sampler_t SAMPLER_NORMAL2 = SHADER_SAMPLER13; // Test normal map layers
 const Sampler_t SAMPLER_NORMAL3 = SHADER_SAMPLER14;
 
+const Sampler_t SAMPLER_SSS = SHADER_SAMPLER15;
+//const Sampler_t SAMPLER_TRANSMISSION = SHADER_SAMPLER16;
+
 // Convars
 static ConVar mat_fullbright("mat_fullbright", "0", FCVAR_CHEAT);
 static ConVar mat_specular("mat_specular", "1", FCVAR_CHEAT);
@@ -68,6 +71,24 @@ struct PBR_Vars_t
     int mraoTexture;
     int useEnvAmbient;
     int specularTexture;
+    //int transmissionTexture;
+
+    // From VertexLitGeneric
+    int wrinkle;
+	int stretch;
+	int detail;
+	int detailFrame;
+	int detailScale;
+
+    int normalWrinkle;
+	int normalStretch;
+
+    int sssTexture;
+    int sssScale;
+
+    int detailTextureCombineMode;
+	int detailTextureBlendFactor;
+	int detailTextureTransform;
 };
 
 // Beginning the shader
@@ -81,16 +102,42 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         SHADER_PARAM(EMISSIONTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "", "Emission texture");
         SHADER_PARAM(NORMALTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture (deprecated, use $bumpmap)");
         SHADER_PARAM(BUMPMAP, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture");
-        SHADER_PARAM(BUMPTRANSFORM, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap texcoord transform" )
+        SHADER_PARAM(BUMPTRANSFORM, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap texcoord transform");
         SHADER_PARAM(BUMPMAP2, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture2");
-		SHADER_PARAM(BUMPTRANSFORM2, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap2 texcoord transform" )
+        SHADER_PARAM(BUMPTRANSFORM2, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap2 texcoord transform");
         SHADER_PARAM(BUMPMAP3, SHADER_PARAM_TYPE_TEXTURE, "", "Normal texture3");
-		SHADER_PARAM(BUMPTRANSFORM3, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap3 texcoord transform" )
+        SHADER_PARAM(BUMPTRANSFORM3, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$bumpmap3 texcoord transform");
         SHADER_PARAM(USEENVAMBIENT, SHADER_PARAM_TYPE_BOOL, "0", "Use the cubemaps to compute ambient light.");
         SHADER_PARAM(SPECULARTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "", "Specular F0 RGB map");
         SHADER_PARAM(PARALLAX, SHADER_PARAM_TYPE_BOOL, "0", "Use Parallax Occlusion Mapping.");
         SHADER_PARAM(PARALLAXDEPTH, SHADER_PARAM_TYPE_FLOAT, "0.0030", "Depth of the Parallax Map");
         SHADER_PARAM(PARALLAXCENTER, SHADER_PARAM_TYPE_FLOAT, "0.5", "Center depth of the Parallax Map");
+
+        // From VertexLitGeneric
+        SHADER_PARAM(COMPRESS, SHADER_PARAM_TYPE_TEXTURE, "shadertest/BaseTexture", "compression wrinklemap");
+        SHADER_PARAM(STRETCH, SHADER_PARAM_TYPE_TEXTURE, "shadertest/BaseTexture", "expansion wrinklemap");
+        SHADER_PARAM(DETAIL, SHADER_PARAM_TYPE_TEXTURE, "shadertest/detail", "detail texture");
+        SHADER_PARAM(DETAILFRAME, SHADER_PARAM_TYPE_INTEGER, "0", "frame number for $detail");
+        SHADER_PARAM(DETAILSCALE, SHADER_PARAM_TYPE_FLOAT, "4", "scale of the detail texture");
+        SHADER_PARAM(ENVMAPFRAME, SHADER_PARAM_TYPE_INTEGER, "0", "envmap frame number");
+        SHADER_PARAM(ENVMAPMASK, SHADER_PARAM_TYPE_TEXTURE, "shadertest/shadertest_envmask", "envmap mask");
+        SHADER_PARAM(ENVMAPMASKFRAME, SHADER_PARAM_TYPE_INTEGER, "0", "");
+        SHADER_PARAM(ENVMAPMASKTRANSFORM, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$envmapmask texcoord transform");
+        SHADER_PARAM(ENVMAPTINT, SHADER_PARAM_TYPE_COLOR, "[1 1 1]", "envmap tint");
+        SHADER_PARAM(BUMPCOMPRESS, SHADER_PARAM_TYPE_TEXTURE, "models/shadertest/shader3_normal", "compression bump map");
+        SHADER_PARAM(BUMPSTRETCH, SHADER_PARAM_TYPE_TEXTURE, "models/shadertest/shader1_normal", "expansion bump map");
+
+        SHADER_PARAM(ENVMAPCONTRAST, SHADER_PARAM_TYPE_FLOAT, "0.0", "contrast 0 == normal 1 == color*color");
+        SHADER_PARAM(ENVMAPSATURATION, SHADER_PARAM_TYPE_FLOAT, "1.0", "saturation 0 == greyscale 1 == normal");
+
+        SHADER_PARAM( SSSTEXTURE, SHADER_PARAM_TYPE_TEXTURE, "shadertest/BaseTexture", "1D ramp texture for tinting scalar diffuse term" );
+        SHADER_PARAM( SSSSCALE, SHADER_PARAM_TYPE_FLOAT, "1", "Scale of the SSS Effect");
+
+        SHADER_PARAM(DETAILBLENDMODE, SHADER_PARAM_TYPE_INTEGER, "0", "mode for combining detail texture with base. 0=normal, 1= additive, 2=alpha blend detail over base, 3=crossfade");
+        SHADER_PARAM(DETAILBLENDFACTOR, SHADER_PARAM_TYPE_FLOAT, "1", "blend amount for detail texture.");
+        SHADER_PARAM(DETAILTINT, SHADER_PARAM_TYPE_COLOR, "[1 1 1]", "detail texture tint");
+        SHADER_PARAM(DETAILTEXTURETRANSFORM, SHADER_PARAM_TYPE_MATRIX, "center .5 .5 scale 1 1 rotate 0 translate 0 0", "$detail texcoord transform");
+
     END_SHADER_PARAMS;
 
     // Setting up variables for this shader
@@ -100,11 +147,11 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         info.baseColor = COLOR;
         info.normalTexture = NORMALTEXTURE;
         info.bumpMap = BUMPMAP;
-        info.bumpTransform = BASETEXTURETRANSFORM;
+        info.bumpTransform = BUMPTRANSFORM;
         info.bumpMap2 = BUMPMAP2;
-        info.bumpTransform2 = BASETEXTURETRANSFORM;
+        info.bumpTransform2 = BUMPTRANSFORM2;
         info.bumpMap3 = BUMPMAP3;
-        info.bumpTransform3 = BASETEXTURETRANSFORM;
+        info.bumpTransform3 = BUMPTRANSFORM3;
         info.baseTextureFrame = FRAME;
         info.baseTextureTransform = BASETEXTURETRANSFORM;
         info.alphaTestReference = ALPHATESTREFERENCE;
@@ -118,6 +165,22 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         info.useParallax = PARALLAX;
         info.parallaxDepth = PARALLAXDEPTH;
         info.parallaxCenter = PARALLAXCENTER;
+
+        // From VertexLitGeneric
+        info.wrinkle = COMPRESS;
+        info.stretch = STRETCH;
+        info.detail = DETAIL;
+        info.detailFrame = DETAILFRAME;
+        info.detailScale = DETAILSCALE;
+        
+        info.normalWrinkle = BUMPCOMPRESS;
+        info.normalStretch = BUMPSTRETCH;
+
+        info.sssTexture = SSSTEXTURE;
+        info.sssScale = SSSSCALE;
+        info.detailTextureBlendFactor = DETAILBLENDFACTOR;
+        info.detailTextureCombineMode = DETAILBLENDMODE;
+        info.detailTextureTransform = DETAILTEXTURETRANSFORM;
     };
 
     // Initializing parameters
@@ -133,18 +196,24 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
 
         // Fallback to original bumpmap
         if (!params[BUMPMAP2]->IsDefined())
-            params[BUMPMAP2]->SetStringValue(params[BUMPMAP]->GetStringValue());
+            params[BUMPMAP2]->SetStringValue("dev/flat_normal");
 
         if (!params[BUMPMAP3]->IsDefined())
-            params[BUMPMAP3]->SetStringValue(params[BUMPMAP]->GetStringValue());
+            params[BUMPMAP3]->SetStringValue("dev/flat_normal");
 
         // Set a good default mrao texture
         if (!params[MRAOTEXTURE]->IsDefined())
             params[MRAOTEXTURE]->SetStringValue("dev/pbr_mraotexture");
 
+        if (!params[SSSTEXTURE]->IsDefined())
+            params[SSSTEXTURE]->SetStringValue("shadertest/black");
+
         // PBR relies heavily on envmaps
         if (!params[ENVMAP]->IsDefined())
             params[ENVMAP]->SetStringValue("env_cubemap");
+
+        if (!params[SSSSCALE]->IsDefined())
+            params[SSSSCALE]->SetFloatValue(1.0f);
 
         // Check if the hardware supports flashlight border color
         if (g_pHardwareConfig->SupportsBorderColor())
@@ -190,6 +259,9 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
 
         Assert(info.mraoTexture >= 0);
         LoadTexture(info.mraoTexture, 0);
+
+        Assert(info.sssTexture >= 0);
+        LoadTexture(info.sssTexture, 0);
 
         if (params[info.baseTexture]->IsDefined())
         {
@@ -241,6 +313,7 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         bool bLightMapped = !IS_FLAG_SET(MATERIAL_VAR_MODEL);
         bool bUseEnvAmbient = (info.useEnvAmbient != -1) && (params[info.useEnvAmbient]->GetIntValue() == 1);
         bool bHasSpecularTexture = (info.specularTexture != -1) && params[info.specularTexture]->IsTexture();
+        bool bHasSSSTexture = (info.sssTexture != -1) && params[info.sssTexture]->IsTexture();
 
         // Determining whether we're dealing with a fully opaque material
         BlendType_t nBlendType = EvaluateBlendRequirements(info.baseTexture, true);
@@ -286,12 +359,14 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             pShaderShadow->EnableSRGBRead(SAMPLER_MRAO, false);         // MRAO isn't sRGB
             pShaderShadow->EnableTexture(SAMPLER_NORMAL, true);         // Normal texture
             pShaderShadow->EnableSRGBRead(SAMPLER_NORMAL, false);       // Normals aren't sRGB
-            pShaderShadow->EnableTexture(SAMPLER_NORMAL2, true);         // Ditto of two lines above
+            pShaderShadow->EnableTexture(SAMPLER_NORMAL2, true);         // Ditto
             pShaderShadow->EnableSRGBRead(SAMPLER_NORMAL2, false);
             pShaderShadow->EnableTexture(SAMPLER_NORMAL3, true);
             pShaderShadow->EnableSRGBRead(SAMPLER_NORMAL3, false);
             pShaderShadow->EnableTexture(SAMPLER_SPECULAR, true);       // Specular F0 texture
             pShaderShadow->EnableSRGBRead(SAMPLER_SPECULAR, true);      // Specular F0 is sRGB
+            pShaderShadow->EnableTexture(SAMPLER_SSS, true);       // SSS texture
+            pShaderShadow->EnableSRGBRead(SAMPLER_SSS, true);      // SSS is sRGB
 
             // If the flashlight is on, set up its textures
             if (bHasFlashlight)
@@ -385,6 +460,7 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
         {
             bool bLightingOnly = mat_fullbright.GetInt() == 2 && !IS_FLAG_SET(MATERIAL_VAR_NO_DEBUG_OVERRIDE);
 
+
             // Setting up albedo texture
             if (bHasBaseTexture)
             {
@@ -470,6 +546,15 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             else
             {
                 pShaderAPI->BindStandardTexture(SAMPLER_SPECULAR, TEXTURE_BLACK);
+            }
+
+            if (bHasSSSTexture)
+            {
+                BindTexture(SAMPLER_SSS, info.sssTexture, 0);
+            }
+            else
+            {
+                pShaderAPI->BindStandardTexture(SAMPLER_SSS, TEXTURE_WHITE);
             }
 
             // Getting the light state
@@ -605,18 +690,18 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
                 bool bUnusedTexCoords[3] = { false, false, !pShaderAPI->IsHWMorphingEnabled() || !bIsDecal };
 				pShaderAPI->MarkUnusedVertexFields( 0, 3, bUnusedTexCoords );
             }
-
+            
             // Setting up base texture transform
             SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_0, info.baseTextureTransform);
 
             // Setting up bump texture transform
-            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_1, info.bumpTransform);
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_2, info.bumpTransform);
 
-            // Setting up bump2 texture transform
-            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_2, info.bumpTransform2);
+            // Setting up bump2 texture transform (shared by bumpTransform1)
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_5, info.bumpTransform2);
 
             // Setting up bump3 texture transform
-            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_3, info.bumpTransform3);
+            SetVertexShaderTextureTransform(VERTEX_SHADER_SHADER_SPECIFIC_CONST_6, info.bumpTransform3);
 
             // This is probably important
             SetModulationPixelShaderDynamicState_LinearColorSpace(1);
@@ -689,7 +774,7 @@ BEGIN_VS_SHADER(PBR, "PBR shader")
             flParams[0] = GetFloatParam(info.parallaxDepth, params, 3.0f);
             // Parallax Center (the height at which it's not moved)
             flParams[1] = GetFloatParam(info.parallaxCenter, params, 3.0f);
-            pShaderAPI->SetPixelShaderConstant(27, flParams, 1);
+            pShaderAPI->SetPixelShaderConstant(27, flParams, 1)
 
         }
 
