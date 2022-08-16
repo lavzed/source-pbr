@@ -7,6 +7,7 @@ I was tired of mesh stacking to achieve PBR. I have a few augmentations here and
 - Two extra bumpmaps
 - Facial flexes
 - Fixed alpha-test lighting
+- Weird rimlight/subsurface-scattering implementation
 
 These features have rudimentary implementation; they have been made not with optimization 
 in mind, rather to enhance my Garry's Mod artistry. I would like your thoughts on how 
